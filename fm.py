@@ -237,8 +237,8 @@ class FileManipulator:
         self.print_directory_tree(self.str_newpath)
 
 # Example usage
-str_oldpath = r'E:\WXQ_workspace\VScode\demo\oldf'
-str_newpath = r'E:\WXQ_workspace\VScode\demo\newf'
+str_oldpath = r'E:\WXQ_workspace\VScode\FMdir\conf\oldf'
+str_newpath = r'E:\WXQ_workspace\VScode\FMdir\conf\newf'
 max_file_dict = {}
 
 fm = FileManipulator(str_oldpath, str_newpath, max_file_dict)
