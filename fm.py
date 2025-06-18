@@ -1,10 +1,120 @@
 import os
+import re
 import shutil
 import time
 import docx
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
 
+class FileUtils:
+    """严格禁止实例化的工具类"""
+
+    @staticmethod
+    def recursively_delete_contents(folder_path):
+        """
+        递归删除文件夹内的所有内容。
+
+        参数:
+            folder_path (str): 要删除内容的文件夹路径。
+
+        返回:
+            None
+        """
+        # 遍历文件夹中的所有子项
+        for item_name in os.listdir(folder_path):
+            item_path = os.path.join(folder_path, item_name)
+
+            # 检查是否为文件或文件夹
+            if os.path.isfile(item_path):
+                # 如果是文件，则删除
+                os.remove(item_path)
+            elif os.path.isdir(item_path):
+                # 如果是文件夹，则递归删除该文件夹及内部所有内容
+                recursively_delete_contents(item_path)
+                # 删除空文件夹
+                os.rmdir(item_path)
+
+    @staticmethod
+    def increment_filename_number(filename: str,start_sep: str = '-', end_sep: str = '.') -> str:
+        """
+        文件名数字递增方法
+        
+        参数:
+            filename: 原始文件名
+            start_sep: 起始定位字符串
+            end_sep: 结束定位字符串
+            
+        返回:
+            处理后的新文件名
+        """
+        # 找到起始定位字符串第一次出现的位置
+        start_index = filename.find(start_sep)
+        if start_index == -1:
+            return filename  # 未找到起始定位字符串
+        
+        # 计算起始搜索位置（跳过起始字符串）
+        start_search = start_index + len(start_sep)
+        
+        # 找到结束定位字符串最后一次出现的位置
+        end_index = filename.rfind(end_sep, start_search)
+        if end_index == -1:
+            return filename  # 未找到结束定位字符串
+        
+        # 提取目标范围内的内容
+        target_str = filename[start_search:end_index]
+        
+        # 在目标字符串中查找第一个连续数字序列
+        match = re.search(r'\d+', target_str)
+        if not match:
+            return filename  # 未找到数字序列
+        
+        # 提取数字部分和原始位数
+        number_part = match.group()
+        original_digits = len(number_part)
+        start_pos = match.start()
+        end_pos = match.end()
+        
+        # 转换为整数并+1
+        try:
+            number_value = int(number_part)
+            new_number = number_value + 1
+            new_number_str = str(new_number)
+        except ValueError:
+            return filename
+        
+        # 保留原始位数格式（前导零）
+        if len(new_number_str) < original_digits:
+            new_number_str = new_number_str.zfill(original_digits)
+        
+        # 构建新目标字符串（仅替换数字部分）
+        new_target_str = (
+            target_str[:start_pos] + 
+            new_number_str + 
+            target_str[end_pos:]
+        )
+        
+        # 构建完整新文件名
+        return (
+            filename[:start_search] + 
+            new_target_str + 
+            filename[end_index:]
+        )
+
+    @staticmethod
+    def is_str_number(s):
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def run_paragraph(cells):
+        for cell in cells:
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    run.font.highlight_color = docx.enum.text.WD_COLOR_INDEX.RED
+        return
 class FileManipulator:
     def __init__(self, str_oldpath:str, str_newpath:str, max_file_dict:dict):
         self.str_oldpath = str_oldpath
@@ -40,10 +150,11 @@ class FileManipulator:
         files = os.listdir(str_oldpath)
 
         for f_name in files:
-            i_var1 = f_name.rfind("-")
-            if i_var1 != -1:
-                file_index = int(f_name[i_var1 + 1:])
-                file_code = f_name[i_var1 + 1:]
+            i_var1 = f_name.rfind("-") # -所在的位置
+            # 新增封面文件处理
+            if i_var1 != -1 and os.path.isdir(os.path.join(str_oldpath,f_name)):
+                file_index = int(f_name[i_var1 + 1:]) 
+                file_code = f_name[i_var1 + 1:] 
                 file_class = f_name[0:i_var1]
 
                 last_index = int(max_file_dict.get(file_class, 0))
@@ -66,49 +177,45 @@ class FileManipulator:
                 os.utime(target_folder, (time.time(), time.time()))
             else:
                 print(f"文件夹已存在于：{target_folder}")
-
         self.max_file_dict=max_file_dict
+        
+        # 复制封面文件
+        for f_name in files:
+            if not os.path.isdir(os.path.join(str_oldpath,f_name)):
+                # 源文件夹和目标文件夹路径
+                source_folder = os.path.join(str_oldpath, f_name)
+                target_folder = os.path.join(str_newpath, f_name)
+
+                # 如果目标文件夹不存在，则复制源文件夹
+                if not os.path.exists(target_folder):
+                    shutil.copy(source_folder, target_folder)
+                    # 复制文件属性并设置时间戳
+                    shutil.copystat(source_folder, target_folder)
+                    os.utime(target_folder, (time.time(), time.time()))
+                else:
+                    print(f"文件夹已存在于：{target_folder}")
 
     def del_files(self):
         """
         删除给定目标路径下的文件
 
         参数:
-            str_tarpath (str): 执行删除和重命名操作的目标路径。
+            str_tarpath (str): 执行删除操作的目标路径。
 
         返回:
             None
         """
         str_tarpath=self.str_newpath
 
-        def recursively_delete_contents(folder_path):
-            """
-            递归删除文件夹内的所有内容。
-
-            参数:
-                folder_path (str): 要删除内容的文件夹路径。
-
-            返回:
-                None
-            """
-            # 遍历文件夹中的所有子项
-            for item_name in os.listdir(folder_path):
-                item_path = os.path.join(folder_path, item_name)
-
-                # 检查是否为文件或文件夹
-                if os.path.isfile(item_path):
-                    # 如果是文件，则删除
-                    os.remove(item_path)
-                elif os.path.isdir(item_path):
-                    # 如果是文件夹，则递归删除该文件夹及内部所有内容
-                    recursively_delete_contents(item_path)
-                    # 删除空文件夹
-                    os.rmdir(item_path)
-
         try:
             # 遍历目标路径下的所有子项：Analysis、Product...
             for folder_item in os.listdir(str_tarpath):
                 folder_path = os.path.join(str_tarpath, folder_item)
+
+                #判断是否为文件夹
+                if not os.path.isdir(folder_path):
+                    continue  # 跳过非文件夹项
+
                 # 遍历文件夹内的所有子项：Data Pack、证据...
                 for item_name in os.listdir(folder_path):
                     item_path = os.path.join(folder_path, item_name)
@@ -119,7 +226,7 @@ class FileManipulator:
                         os.remove(item_path)
                     elif os.path.isdir(item_path):
                         # 如果是文件夹，则递归删除内部所有内容
-                        recursively_delete_contents(item_path)
+                        FileUtils.recursively_delete_contents(item_path)
         except (FileNotFoundError, PermissionError, OSError) as e:
             print(f"发生错误：{e}")
 
@@ -132,11 +239,19 @@ class FileManipulator:
             # 遍历目标路径下的所有子项：Analysis、Product...
             for folder_item in os.listdir(str_tarpath):
                 folder_path = os.path.join(str_tarpath, folder_item)
+
+                #判断是否为文件夹
+                if not os.path.isdir(folder_path):
+                    # 不是文件夹  则是封面文件
+                    newFileName=FileUtils.increment_filename_number(folder_item)
+                    new_file_path = os.path.join(str_tarpath, newFileName)
+                    os.rename(folder_path, new_file_path)  # 使用完整路径重命名
+                    continue  # 跳过非文件夹项
+
                 # 遍历文件夹内的所有子项：Data Pack、证据...
                 for item_name in os.listdir(folder_path):
                     item_path = os.path.join(folder_path, item_name)
 
-                    # 判断是文件还是文件夹
                     # 检查是否为文件，且文件名不以 ~$ 开头
                     if os.path.isfile(item_path) and not item_name.startswith('~$'):
                         # 查找括号的位置
@@ -159,21 +274,45 @@ class FileManipulator:
 
     def edt_docx(self):
         str_tarpath=self.str_newpath
-        def is_str_number(s):
-            try:
-                float(s)
-                return True
-            except ValueError:
-                return False
-        def run_paragraph(cells):
-            for cell in cells:
-                for paragraph in cell.paragraphs:
-                    for run in paragraph.runs:
-                        run.font.highlight_color = docx.enum.text.WD_COLOR_INDEX.RED
-            return
+
         # 获取当前脚本所在目录的绝对路径
         for head_file_name in os.listdir(str_tarpath):
             current_directory = os.path.join(str_tarpath,head_file_name)
+
+            #判断是否为文件夹
+            if not os.path.isdir(current_directory):
+                # 不是文件夹  则是封面文件
+                doc = docx.Document(current_directory)
+                tab = doc.tables[0]
+
+                # 获取目标单元格
+                target_cell = tab.rows[2].cells[0]
+
+                # 保存原始格式的文本运行(runs)
+                original_runs = target_cell.paragraphs[0].runs.copy()
+
+                # 清除单元格内容
+                for paragraph in target_cell.paragraphs:
+                    p = paragraph._element
+                    p.getparent().remove(p)
+
+                # 添加新段落
+                new_paragraph = target_cell.add_paragraph()
+
+                # 添加新文本运行，并复制原始格式
+                if original_runs:
+                    # 使用第一个原始运行的格式作为基准
+                    base_run = original_runs[0]
+                    new_run = new_paragraph.add_run(head_file_name.replace(".docx", ""))
+                    
+                    # 复制字体格式
+                    new_run.font.name = base_run.font.name
+                    new_run.font.size = base_run.font.size
+                else:
+                    # 如果没有原始运行，直接添加文本
+                    new_paragraph.add_run(head_file_name.replace(".docx", ""))
+                doc.save(current_directory)
+                continue  # 跳过非文件夹项
             for file_name in os.listdir(current_directory):
                 file_path=os.path.join(current_directory,file_name)
                 if "REC-Q680003-A2" in file_name:
@@ -189,9 +328,9 @@ class FileManipulator:
                             tab.rows[0].cells[1].text=head_file_name
                         else :
                             for t_row in tab.rows:
-                                if is_str_number(t_row.cells[0].text):
+                                if FileUtils.is_str_number(t_row.cells[0].text):
                                     # 添加红色底纹
-                                    run_paragraph(t_row.cells)
+                                    FileUtils.run_paragraph(t_row.cells)
 
                     # 保存文档
                     doc.save(file_path)
@@ -204,13 +343,13 @@ class FileManipulator:
                     rows_index=[2,3,5,7] # 添加红色底纹的行
                     rows[0].cells[2].text=head_file_name  # 修改表头
                     for r in rows_index:
-                        run_paragraph(rows[r].cells)
+                        FileUtils.run_paragraph(rows[r].cells)
 
                     
                     
                     for t_row in tables[2].rows:
                         if t_row.cells[0].text in head_file_name:
-                            run_paragraph(t_row.cells)
+                            FileUtils.run_paragraph(t_row.cells)
 
                     # 保存文档
                     doc.save(file_path)
@@ -234,13 +373,12 @@ class FileManipulator:
         self.del_files()
         self.ren_files()
         self.edt_docx()
-        self.print_directory_tree(self.str_newpath)
 
-# Example usage
-str_oldpath = r'E:\WXQ_workspace\VScode\FMdir\conf\oldf'
-str_newpath = r'E:\WXQ_workspace\VScode\FMdir\conf\newf'
-max_file_dict = {}
+if __name__ == "__main__":
+    str_oldpath = r'E:\WXQ_workspace\VScode\FMdir\conf\oldf'
+    str_newpath = r'E:\WXQ_workspace\VScode\FMdir\conf\newf'
+    max_file_dict = {}
 
-fm = FileManipulator(str_oldpath, str_newpath, max_file_dict)
-fm.execute_operations()
-# fm.print_directory_tree(fm.str_newpath)
+    fm = FileManipulator(str_oldpath, str_newpath, max_file_dict)
+    fm.execute_operations()
+    fm.print_directory_tree(fm.str_newpath)
