@@ -1,2 +1,6 @@
 /conf/
+/build/
+/dist/
+/_pycache_/
+config.json
 tes.py

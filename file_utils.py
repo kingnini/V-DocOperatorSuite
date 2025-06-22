@@ -1,8 +1,14 @@
 import re
 import os
 import json
+import sys
 import docx
 from docx.enum.text import WD_COLOR_INDEX
+
+if __name__ == "__main__":
+    # 当直接运行此脚本时初始化配置
+    config = FileUtils.load_config()  # 修正为使用类方法
+    FileUtils.save_config(config)  # 修正为使用类方法
 
 class FileUtils:
     """严格禁止实例化的工具类"""
@@ -17,33 +23,49 @@ class FileUtils:
     ]
 
     @staticmethod
+    def get_config_path():
+        """获取配置文件路径（支持打包环境）"""
+        if getattr(sys, 'frozen', False):
+            # 打包环境 - 使用exe所在目录
+            base_path = os.path.dirname(sys.executable)
+        else:
+            # 开发环境 - 使用脚本所在目录
+            base_path = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(base_path, 'config.json')
+
+    @staticmethod
     def save_config(config):
-        """保存配置到文件"""
+        """保存配置到文件（支持打包环境）"""
+        config_path = FileUtils.get_config_path()
         try:
-            with open('config.json', 'w', encoding='utf-8') as f:
+            with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"保存配置失败: {e}")
 
     @staticmethod
     def load_config():
-        """从文件加载配置"""
+        """从文件加载配置（支持打包环境）"""
         config = {
             'head_list': FileUtils.head_list,
             'default_old_path': '',
             'default_new_path': '',
         }
+        config_path = FileUtils.get_config_path()
         
         try:
-            if os.path.exists('config.json'):
-                with open('config.json', 'r', encoding='utf-8') as f:
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
                     loaded_config = json.load(f)
                     config.update(loaded_config)
+            else:
+                # 如果配置文件不存在，创建默认配置
+                FileUtils.save_config(config)
         except Exception as e:
             print(f"加载配置失败: {e}")
         
         return config
-
+        
     @staticmethod
     def recursively_delete_contents(folder_path):
         """
