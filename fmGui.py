@@ -39,7 +39,7 @@ class FileUtils:
                 os.rmdir(item_path)
 
     @staticmethod
-    def increment_filename_number(filename: str, start_sep: str = '-', end_sep: str = '.') -> str:
+    def increment_filename_number(filename: str, start_sep: str = '', end_sep: str = '') -> str:
         """
         文件名数字递增方法
         
@@ -51,18 +51,24 @@ class FileUtils:
         返回:
             处理后的新文件名
         """
-        # 找到起始定位字符串第一次出现的位置
-        start_index = filename.find(start_sep)
-        if start_index == -1:
-            return filename  # 未找到起始定位字符串
-        
-        # 计算起始搜索位置（跳过起始字符串）
-        start_search = start_index + len(start_sep)
-        
-        # 找到结束定位字符串最后一次出现的位置
-        end_index = filename.rfind(end_sep, start_search)
-        if end_index == -1:
-            return filename  # 未找到结束定位字符串
+        if start_sep != '':
+            # 找到起始定位字符串第一次出现的位置
+            start_index = filename.find(start_sep)
+            if start_index == -1:
+                return filename  # 未找到起始定位字符串
+            
+            # 计算起始搜索位置（跳过起始字符串）
+            start_search = start_index + len(start_sep)
+        else :
+            start_search = 0
+            
+        if end_sep != '':
+            # 找到结束定位字符串最后一次出现的位置
+            end_index = filename.rfind(end_sep, start_search)
+            if end_index == -1:
+                return filename  # 未找到结束定位字符串
+        else:
+            end_index = len(filename)
         
         # 提取目标范围内的内容
         target_str = filename[start_search:end_index]
@@ -114,13 +120,120 @@ class FileUtils:
 
     @staticmethod
     def run_paragraph(cells):
+        """加红色底纹"""
         for cell in cells:
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
                     run.font.highlight_color = docx.enum.text.WD_COLOR_INDEX.RED
         return
 
+    @staticmethod
+    def edt_docx(doc_path:str,doc_name:str):
 
+        head_list=[
+                'Analysis','CofA Step','Events','Format Calculation','LIMS Constant',
+                'LIMS Users','Label Printer','Lists','Lot Template','Product',
+                'Report Template','Stock','Subroutine','Suppliers','T PH AQL Sample Plan',
+                'T PH Item Code','T PH Sample Plan','T_PH_Grade','T_PH_Spec Type','T_Report Text',
+                'Table Master','Table Template','Units','User Dialog','vendor','Stage'
+            ]
+        file_path = os.path.join(doc_path, doc_name)
+
+        if any(doc_name.startstartswith(head) for head in head_list)
+            # 处理封面文件
+            doc = docx.Document(file_path)
+            tab = doc.tables[0]
+
+            # 获取目标单元格
+            target_cell = tab.rows[2].cells[0]
+
+            # 保存原始格式的文本运行(runs)
+            original_runs = target_cell.paragraphs[0].runs.copy()
+
+            # 清除单元格内容
+            for paragraph in target_cell.paragraphs:
+                p = paragraph._element
+                p.getparent().remove(p)
+
+            # 添加新段落
+            new_paragraph = target_cell.add_paragraph()
+
+            # 添加新文本运行，并复制原始格式
+            if original_runs:
+                # 使用第一个原始运行的格式作为基准
+                base_run = original_runs[0]
+                new_run = new_paragraph.add_run(doc_name.replace(".docx", ""))
+
+                # 复制字体格式
+                new_run.font.name = base_run.font.name
+                new_run.font.size = base_run.font.size
+            else:
+                # 如果没有原始运行，直接添加文本
+                new_paragraph.add_run(doc_name.replace(".docx", ""))
+            doc.save(file_path)
+        elif "REC-Q680003-A2" in file_name:
+            # 如果是“REC-Q680003-A2-01  LIMS数据迁移表单”
+            # 加载现有的Word文档
+            doc = docx.Document(file_path)
+            tables = doc.tables
+
+            # 遍历文档中的所有段落
+            for tab in tables:
+                if "数据包名称" in tab.rows[0].cells[0].text:
+                    # 修改表头
+                    tab.rows[0].cells[1].text = increment_filename_number(tab.rows[0].cells[1].text)
+                else:
+                    for t_row in tab.rows:
+                        if FileUtils.is_str_number(t_row.cells[0].text):
+                            # 添加红色底纹
+                            FileUtils.run_paragraph(t_row.cells)
+
+            # 保存文档
+            doc.save(file_path)
+
+        elif "REC-Q680003-A5" in file_name:
+            # 如果是“REC-Q680003-A5-01  LIMS主数据申请表”
+            # 加载现有的Word文档
+            doc = docx.Document(file_path)
+            tables = doc.tables
+            rows = tables[0].rows
+            rows_index = [2, 3, 5, 7]  # 添加红色底纹的行
+            rows[0].cells[2].text = increment_filename_number(rows[0].cells[2].text)  # 修改表头
+            for r in rows_index:
+                FileUtils.run_paragraph(rows[r].cells)
+
+            for t_row in tables[2].rows:
+                if t_row.cells[0].text in rows[0].cells[2].text:
+                    FileUtils.run_paragraph(t_row.cells)
+
+            # 保存文档
+            doc.save(file_path)
+
+    @staticmethod
+    def edit_A2_docx(current_directory:str,file_name:str,to_val_date:str,to_prod_date:str):
+        """批量修改迁移日期"""
+        file_path = os.path.join(doc_path, doc_name)
+
+        if "REC-Q680003-A2" in file_name:
+            # 如果是“REC-Q680003-A2-01  LIMS数据迁移表单”
+            # 加载现有的Word文档
+            doc = docx.Document(file_path)
+            tables = doc.tables
+
+            # 遍历文档中的所有段落
+            for tab in tables:
+                if "数据包名称" in tab.rows[0].cells[0].text:
+                    # 修改表头
+                    tab.rows[0].cells[1].text = increment_filename_number(tab.rows[0].cells[1].text)
+                else:
+                    for t_row in tab.rows:
+                        if FileUtils.is_str_number(t_row.cells[0].text):
+                            # 添加红色底纹
+                            FileUtils.run_paragraph(t_row.cells)
+
+            # 保存文档
+            doc.save(file_path)
+            
 class FileManipulator:
     def __init__(self, str_oldpath: str, str_newpath: str, max_file_dict: dict, output_callback=None):
         self.str_oldpath = str_oldpath
@@ -138,7 +251,7 @@ class FileManipulator:
     def cp_files(self):
         """
         将文件夹从 'str_oldpath' 复制到 'str_newpath'，文件夹中的文件名会根据各类别中文件名的最高数字索引进行更新。
-        如果 'str_newpath' 目录已经存在，将创建一个带有时间戳的同名目录，并清空目录内容。
+        如果 'str_newpath' 目录已经存在，会将目标文件复制移动到一个带有时间戳的同名目录，然后情况目标文件。
         """
         self.log("开始复制文件...")
         str_oldpath = self.str_oldpath
@@ -171,7 +284,7 @@ class FileManipulator:
 
         for f_name in files:
             i_var1 = f_name.rfind("-")  # -所在的位置
-            # 新增封面文件处理
+            # 新增封面文件判断逻辑处理
             if i_var1 != -1 and os.path.isdir(os.path.join(str_oldpath, f_name)):
                 try:
                     file_index = int(f_name[i_var1 + 1:])
@@ -355,83 +468,54 @@ class FileManipulator:
             if not os.path.isdir(current_directory):
                 # 不是文件夹  则是封面文件
                 try:
-                    doc = docx.Document(current_directory)
-                    tab = doc.tables[0]
-
-                    # 获取目标单元格
-                    target_cell = tab.rows[2].cells[0]
-
-                    # 保存原始格式的文本运行(runs)
-                    original_runs = target_cell.paragraphs[0].runs.copy()
-
-                    # 清除单元格内容
-                    for paragraph in target_cell.paragraphs:
-                        p = paragraph._element
-                        p.getparent().remove(p)
-
-                    # 添加新段落
-                    new_paragraph = target_cell.add_paragraph()
-
-                    # 添加新文本运行，并复制原始格式
-                    if original_runs:
-                        # 使用第一个原始运行的格式作为基准
-                        base_run = original_runs[0]
-                        new_run = new_paragraph.add_run(head_file_name.replace(".docx", ""))
-
-                        # 复制字体格式
-                        new_run.font.name = base_run.font.name
-                        new_run.font.size = base_run.font.size
-                    else:
-                        # 如果没有原始运行，直接添加文本
-                        new_paragraph.add_run(head_file_name.replace(".docx", ""))
-                    doc.save(current_directory)
-                    self.log(f"已编辑封面文件: {head_file_name}")
+                    FileUtils.edt_docx(str_tarpath,head_file_name)
+                    self.log(f"已编辑封面: {head_file_name}")
                 except Exception as e:
                     self.log(f"编辑封面文件时出错: {e}")
-                continue  # 跳过非文件夹项
+                continue  # 跳过后续
 
             for file_name in os.listdir(current_directory):
                 file_path = os.path.join(current_directory, file_name)
                 try:
                     if "REC-Q680003-A2" in file_name:
                         # 如果是“REC-Q680003-A2-01  LIMS数据迁移表单”
-                        # 加载现有的Word文档
-                        doc = docx.Document(file_path)
-                        tables = doc.tables
-
-                        # 遍历文档中的所有段落
-                        for tab in tables:
-                            if "数据包名称" in tab.rows[0].cells[0].text:
-                                # 修改表头
-                                tab.rows[0].cells[1].text = head_file_name
-                            else:
-                                for t_row in tab.rows:
-                                    if FileUtils.is_str_number(t_row.cells[0].text):
-                                        # 添加红色底纹
-                                        FileUtils.run_paragraph(t_row.cells)
-
-                        # 保存文档
-                        doc.save(file_path)
-                        self.log(f"已编辑数据迁移表单: {file_name}")
+                       FileUtils.edt_docx(current_directory,file_name)
+                        self.log(f"已编辑迁移表: {file_name}")
 
                     elif "REC-Q680003-A5" in file_name:
                         # 如果是“REC-Q680003-A5-01  LIMS主数据申请表”
-                        # 加载现有的Word文档
-                        doc = docx.Document(file_path)
-                        tables = doc.tables
-                        rows = tables[0].rows
-                        rows_index = [2, 3, 5, 7]  # 添加红色底纹的行
-                        rows[0].cells[2].text = head_file_name  # 修改表头
-                        for r in rows_index:
-                            FileUtils.run_paragraph(rows[r].cells)
+                        FileUtils.edt_docx(current_directory,file_name)
+                        self.log(f"已编辑申请表: {file_name}")
+                except Exception as e:
+                    self.log(f"编辑Word文档时出错: {e}")
 
-                        for t_row in tables[2].rows:
-                            if t_row.cells[0].text in head_file_name:
-                                FileUtils.run_paragraph(t_row.cells)
+        self.log("Word文档编辑完成")
+        return True
+    
+    def edt_A2_docx(self,to_val_date:str,to_prod_date:str =''):
+        self.log("批量设置验证日期和迁移日期...")
+        str_tarpath = self.str_newpath
 
-                        # 保存文档
-                        doc.save(file_path)
-                        self.log(f"已编辑主数据申请表: {file_name}")
+        if to_val_date=='':
+            return False
+        else if to_val_date=='':
+            to_val_date=to_val_date
+        
+        # 获取当前脚本所在目录的绝对路径
+        for head_file_name in os.listdir(str_tarpath):
+            current_directory = os.path.join(str_tarpath, head_file_name)
+
+            # 判断是否为文件夹
+            if not os.path.isdir(current_directory):
+                continue  # 跳过后续
+
+            for file_name in os.listdir(current_directory):
+                file_path = os.path.join(current_directory, file_name)
+                try:
+                    if "REC-Q680003-A2" in file_name:
+                        # 如果是“REC-Q680003-A2-01  LIMS数据迁移表单”
+                       FileUtils.edit_A2_docx(current_directory,file_name,to_val_date,to_prod_date)
+                        self.log(f"已修改: {file_name}")
                 except Exception as e:
                     self.log(f"编辑Word文档时出错: {e}")
 
