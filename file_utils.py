@@ -4,6 +4,7 @@ import json
 import sys
 import docx
 from docx.enum.text import WD_COLOR_INDEX
+import csv
 
 if __name__ == "__main__":
     # 当直接运行此脚本时初始化配置
@@ -181,6 +182,53 @@ class FileUtils:
         return
 
     @staticmethod
+    def find_files_by_name(search_path, name_contains:str, extension=None, exclude_temp=True):
+        """
+        查找指定路径下文件名包含特定字符的文件
+        
+        参数:
+        search_path (str): 要搜索的根目录路径
+        name_contains (str): 文件名需要包含的字符串
+        extension (str, optional): 文件后缀名（如'txt'或'.txt'），默认None表示不限后缀
+        exclude_temp (bool, optional): 是否排除临时文件，默认True（排除）
+        
+        返回:
+        list: 匹配文件的完整路径列表
+        """
+        matched_files = []
+        
+        # 标准化后缀格式（确保带点号）
+        normalized_extension = None
+        if extension is not None:
+            # 处理带点号和不带点号的后缀
+            normalized_extension = f".{extension.lstrip('.')}" if extension else ""
+        
+        # 遍历目录树
+        for root, _, files in os.walk(search_path):
+            for file in files:
+                # 检查是否临时文件（如果需要排除）
+                if exclude_temp:
+                    # 排除常见临时文件模式
+                    if file.startswith('~$') or file.startswith('.~') or \
+                    file.endswith('.tmp') or file.endswith('.temp'):
+                        continue
+                
+                # 检查文件名是否包含目标字符串
+                if name_contains in file:
+                    file_path = os.path.join(root, file)
+                    
+                    # 检查后缀条件
+                    if normalized_extension is None:
+                        matched_files.append(file_path)
+                    else:
+                        # 获取文件后缀并转换为小写比较（可选）
+                        file_ext = os.path.splitext(file)[1]
+                        if file_ext.lower() == normalized_extension.lower():
+                            matched_files.append(file_path)
+        
+        return matched_files
+
+    @staticmethod
     def edt_docx(doc_path: str, doc_name: str):
         file_path = os.path.join(doc_path, doc_name)
 
@@ -330,3 +378,116 @@ class FileUtils:
 
         # 统一保存文档
         doc.save(file_path)
+
+    @staticmethod
+    def read_A2(path_a2: str) -> list:
+        put_list=[]
+        try:
+            doc = docx.Document(path_a2)
+            tbs = doc.tables
+            
+            # 查找包含"数据包名称"的表格
+            pack_name_table_idx = None
+            for tb_idx, tab in enumerate(tbs):
+                try:
+                    if "数据包名称" in tab.cell(0, 0).text.strip() :
+                        pack_name_table_idx = tb_idx
+                        break
+                except IndexError:
+                    continue
+            
+            if pack_name_table_idx is None:
+                print(f"在文档 {os.path.basename(path_a2)} 中未找到'数据包名称'表格")
+                return
+            
+            target_table = tbs[pack_name_table_idx +1]
+            package_name = tbs[pack_name_table_idx].cell(0, 1).text.strip()
+            
+            # 处理目标表格中的行
+            for r_idx,row in enumerate(target_table.rows):
+                try:
+                    cell0_text = row.cells[0].text.strip()
+                    # 第一行为标题，跳过
+                    if r_idx == 0:
+                        continue 
+                    # 如果第一列不是数字，停止处理               
+                    elif not FileUtils.is_str_number(cell0_text):
+                        break
+                    
+                    # 获取其他列的内容（注意索引从0开始）
+                    record_name = row.cells[2].text.strip() if len(row.cells) > 2 else ""
+                    to_val_date = row.cells[3].text.strip() if len(row.cells) > 3 else ""
+                    to_prod_date = row.cells[4].text.strip() if len(row.cells) > 4 else ""
+                    
+                    put_list.append((package_name, record_name, to_val_date, to_prod_date))
+                    
+                except Exception as row_ex:
+                    print(f"处理行时出错: {str(row_ex)}")
+        
+        except Exception as e:
+            print(f"处理文档 {path_a2} 时出错: {str(e)}")
+        return put_list
+
+    @staticmethod
+    def read_A5(path_a5: str) -> list:
+        put_list = []
+        tb2_list = []
+
+        try:
+            doc = docx.Document(path_a5)
+            tbs = doc.tables
+            
+            # 添加表格存在性检查
+            if len(tbs) < 3:
+                print(f"文档表格不足: {path_a5}")
+                return [[], []]
+            
+            pack_name = tbs[0].cell(0, 2).text.strip()  # 包名称
+            justification = tbs[0].cell(5, 0).text.strip()  # 理由
+            related_doc = tbs[0].cell(7, 0).text.strip()  # 相关文件
+
+            tb1_list = (pack_name, justification, related_doc)
+
+            # 处理目标表格中的行
+            for row in tbs[2].rows:
+                try:
+                    # 添加单元格存在性检查
+                    if not row.cells or len(row.cells) < 5:
+                        continue
+                    if row.cells[0].text.lower() != pack_name[0:len(pack_name)-5].lower():
+                        continue
+                    
+                    record_name = row.cells[1].text.strip() 
+                    oper_type = row.cells[2].text.strip() 
+                    classification = row.cells[3].text.strip()
+                    criticality  = row.cells[4].text.strip()
+                    
+                    
+                    tb2_list.append((pack_name, record_name, oper_type, classification, criticality))
+                    
+                except Exception as row_ex:
+                    print(f"处理行时出错: {str(row_ex)}")
+            put_list = [tb1_list, tb2_list]
+        except Exception as e:
+            print(f"处理文档 {path_a5} 时出错: {str(e)}")
+            put_list = [[], []]  # 确保返回两个空列表
+        
+        return put_list
+
+    @staticmethod
+    def write_to_csv(data: list, output_path: str,title:list=[]):
+        """将数据写入CSV文件"""
+        try:
+            with open(output_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                if title:
+                    # 写入表头
+                    writer.writerow(title)
+                # 写入所有数据行
+                writer.writerows(data)
+            print(f"成功写入CSV文件: {output_path}")
+            return True
+        except Exception as e:
+            print(f"写入CSV失败: {str(e)}")
+            return False

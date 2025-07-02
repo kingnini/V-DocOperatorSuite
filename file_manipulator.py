@@ -1,7 +1,9 @@
 import os
 import shutil
 import time
+import datetime
 from file_utils import FileUtils
+import csv
 
 class FileManipulator:
     def __init__(self, str_oldpath: str, str_newpath: str, max_file_dict: dict, output_callback=None):
@@ -278,6 +280,82 @@ class FileManipulator:
                     self.log(f"修改《{item}》时出错: {e}")
         return True
 
+    def read_A2_to_csv(self,output_csv):
+        # 初始化数据存储
+        all_data = []
+        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        a2_csv_path = os.path.join(output_csv,f"A2_{timestamp}.csv")
+
+        name_contains='REC-Q680003-A2'
+        extension='docx'
+
+        pathes = FileUtils.find_files_by_name(self.str_newpath,name_contains,extension)
+
+        # 处理每个文档并收集数据
+        total = len(pathes)
+        for path_a2 in pathes:
+            a2_data = FileUtils.read_A2(path_a2)
+            if a2_data:
+                all_data.extend(a2_data)
+        
+        # 写入CSV文件
+        if all_data:
+            title=['包名称', '记录名称', '迁移验证环境日期', '迁移正式环境日期']
+            FileUtils.write_to_csv(all_data, a2_csv_path,title)
+        else:
+            print("未找到有效数据，未生成CSV文件")
+
+    def read_A5_to_csv(self,output_csv):
+        name_contains = "REC-Q680003-A5"
+        extension = "docx"
+        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        # 修改文件路径定义
+        a5_tb1_path = os.path.join(
+            output_csv, 
+            f"A5_tb1_{timestamp}.csv"  # 添加时间戳
+        )
+        a5_tb2_path = os.path.join(
+            output_csv, 
+            f"A5_tb2_{timestamp}.csv"  # 添加时间戳
+        )
+        pathes = FileUtils.find_files_by_name(self.str_newpath, name_contains, extension)
+        
+        # 准备收集数据的列表
+        all_tb1_data = []  # 存储所有文档的tb1数据
+        all_tb2_data = []  # 存储所有文档的tb2数据
+        
+        # 定义CSV表头
+        tb1_title = ['包名称', '理由', '相关文件']
+        tb2_title = ['包名称', '记录名称', '操作类型', '分类','风险评估']
+
+        total = len(pathes)
+        for path_a5 in pathes:            
+            try:
+                # 获取当前文档的数据
+                result = FileUtils.read_A5(path_a5)
+                
+                # 添加结果有效性检查
+                if len(result) >= 1 and result[0]:
+                    all_tb1_data.append(result[0])
+                    
+                if len(result) >= 2 and result[1]:
+                    all_tb2_data.extend(result[1])
+                    
+            except Exception as e:
+                print(f"处理文件 {path_a5} 时发生未捕获错误: {str(e)}")
+                continue  # 继续处理下一个文件
+        
+        # 写入CSV文件
+        if all_tb1_data:
+           FileUtils.write_to_csv(all_tb1_data, a5_tb1_path, tb1_title)
+        else:
+            print("警告: 没有收集到表1数据")
+        
+        if all_tb2_data:
+            FileUtils.write_to_csv(all_tb2_data, a5_tb2_path, tb2_title)
+        else:
+            print("警告: 没有收集到表2数据")
+    
     def get_directory_tree(self, path: str, indent=0):
         """
         获取指定路径下的文件树结构。
