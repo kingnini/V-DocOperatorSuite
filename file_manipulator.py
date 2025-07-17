@@ -289,11 +289,14 @@ class FileManipulator:
         name_contains='REC-Q680003-A2'
         extension='docx'
 
+        self.log(f"开始在目录 '{self.str_newpath}' 中查找A2文档...") 
         pathes = FileUtils.find_files_by_name(self.str_newpath,name_contains,extension)
+        self.log(f"共找到 {len(pathes)} 个A2文档。") 
 
         # 处理每个文档并收集数据
         total = len(pathes)
-        for path_a2 in pathes:
+        for i, path_a2 in enumerate(pathes): 
+            self.log(f"正在处理第 {i+1}/{total} 个文件: {os.path.basename(path_a2)}") 
             a2_data = FileUtils.read_A2(path_a2)
             if a2_data:
                 all_data.extend(a2_data)
@@ -301,9 +304,11 @@ class FileManipulator:
         # 写入CSV文件
         if all_data:
             title=['包名称', '记录名称', '迁移验证环境日期', '迁移正式环境日期']
+            self.log(f"开始将 {len(all_data)} 条数据写入到 {a2_csv_path}")
             FileUtils.write_to_csv(all_data, a2_csv_path,title)
+            self.log(f"成功生成CSV文件: {a2_csv_path}")
         else:
-            print("未找到有效数据，未生成CSV文件")
+            self.log("未找到有效数据，未生成CSV文件。")
 
     def read_A5_to_csv(self,output_csv):
         name_contains = "REC-Q680003-A5"
@@ -318,7 +323,10 @@ class FileManipulator:
             output_csv, 
             f"A5_tb2_{timestamp}.csv"  # 添加时间戳
         )
+
+        self.log(f"开始在目录 '{self.str_newpath}' 中查找A5文档...") 
         pathes = FileUtils.find_files_by_name(self.str_newpath, name_contains, extension)
+        self.log(f"共找到 {len(pathes)} 个A5文档。") 
         
         # 准备收集数据的列表
         all_tb1_data = []  # 存储所有文档的tb1数据
@@ -329,7 +337,8 @@ class FileManipulator:
         tb2_title = ['包名称', '记录名称', '操作类型', '分类','风险评估']
 
         total = len(pathes)
-        for path_a5 in pathes:            
+        for i, path_a5 in enumerate(pathes):
+            self.log(f"正在处理第 {i+1}/{total} 个文件: {os.path.basename(path_a5)}")            
             try:
                 # 获取当前文档的数据
                 result = FileUtils.read_A5(path_a5)
@@ -342,19 +351,21 @@ class FileManipulator:
                     all_tb2_data.extend(result[1])
                     
             except Exception as e:
-                print(f"处理文件 {path_a5} 时发生未捕获错误: {str(e)}")
+                self.log(f"处理文件 {path_a5} 时发生未捕获错误: {str(e)}")
                 continue  # 继续处理下一个文件
         
         # 写入CSV文件
         if all_tb1_data:
            FileUtils.write_to_csv(all_tb1_data, a5_tb1_path, tb1_title)
+           self.log(f"成功生成A5表1的CSV文件: {a5_tb1_path}") 
         else:
-            print("警告: 没有收集到表1数据")
+            self.log("警告: 没有收集到表1数据")
         
         if all_tb2_data:
             FileUtils.write_to_csv(all_tb2_data, a5_tb2_path, tb2_title)
+            self.log(f"成功生成A5表2的CSV文件: {a5_tb2_path}")
         else:
-            print("警告: 没有收集到表2数据")
+            self.log("警告: 没有收集到表2数据")
     
     def get_directory_tree(self, path: str, indent=0):
         """

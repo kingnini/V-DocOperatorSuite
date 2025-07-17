@@ -26,9 +26,10 @@ class FileManagerApp(QMainWindow):
         self.tab_widget = QTabWidget()
         main_layout.addWidget(self.tab_widget, 1)  # 选项卡占据大部分空间
         
-        # 创建三个选项卡页面（日志区域已移动到各自页面）
+        # 创建四个选项卡页面
         self.create_main_tab()
         self.create_date_tab()
+        self.create_export_tab()
         self.create_config_tab()
         
         # 初始化文件管理器
@@ -213,6 +214,137 @@ class FileManagerApp(QMainWindow):
         
         self.tab_widget.addTab(tab, "日期设置")
 
+    def create_export_tab(self):
+        """创建数据导出选项卡"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        splitter = QSplitter(Qt.Vertical)
+        
+        top_widget = QWidget()
+        top_layout = QVBoxLayout(top_widget)
+        
+        # 路径设置
+        path_group = QGroupBox("路径设置")
+        path_layout = QFormLayout()
+        
+        self.export_source_edit = QLineEdit(self.config.get('default_new_path', ''))
+        self.export_source_edit.setPlaceholderText("选择包含A2/A5文档的源目录...")
+        self.export_source_button = QPushButton("浏览...")
+        self.export_source_button.clicked.connect(lambda: self.browse_path(self.export_source_edit))
+        
+        source_layout = QHBoxLayout()
+        source_layout.addWidget(self.export_source_edit)
+        source_layout.addWidget(self.export_source_button)
+        
+        self.csv_output_edit = QLineEdit(self.config.get('default_new_path', ''))
+        self.csv_output_edit.setPlaceholderText("选择CSV文件输出目录...")
+        self.csv_output_button = QPushButton("浏览...")
+        self.csv_output_button.clicked.connect(lambda: self.browse_path(self.csv_output_edit))
+        
+        output_layout = QHBoxLayout()
+        output_layout.addWidget(self.csv_output_edit)
+        output_layout.addWidget(self.csv_output_button)
+        
+        path_layout.addRow("源文档目录:", source_layout)
+        path_layout.addRow("CSV输出目录:", output_layout)
+        path_group.setLayout(path_layout)
+        
+        # 执行按钮
+        button_layout = QHBoxLayout()
+        self.export_a2_button = QPushButton("导出A2数据为CSV")
+        self.export_a2_button.clicked.connect(self.execute_read_a2)
+        self.export_a5_button = QPushButton("导出A5数据为CSV")
+        self.export_a5_button.clicked.connect(self.execute_read_a5)
+        
+        button_layout.addWidget(self.export_a2_button)
+        button_layout.addWidget(self.export_a5_button)
+        
+        top_layout.addWidget(path_group)
+        top_layout.addLayout(button_layout)
+        top_layout.addStretch(1)
+        
+        # 日志区域
+        log_group = QGroupBox("导出日志")
+        log_layout = QVBoxLayout()
+        self.log_text_export = QTextEdit()
+        self.log_text_export.setReadOnly(True)
+        log_layout.addWidget(self.log_text_export)
+        log_group.setLayout(log_layout)
+        
+        splitter.addWidget(top_widget)
+        splitter.addWidget(log_group)
+        splitter.setSizes([int(self.height() * 0.4), int(self.height() * 0.6)])
+        
+        layout.addWidget(splitter)
+        self.tab_widget.addTab(tab, "数据导出")
+
+    def execute_read_a2(self):
+        """执行读取A2文档并导出为CSV的操作"""
+        source_dir = self.export_source_edit.text().strip()
+        output_dir = self.csv_output_edit.text().strip()
+
+        if not source_dir or not output_dir:
+            QMessageBox.warning(self, "路径错误", "请选择源文档目录和CSV输出目录！")
+            return
+            
+        if not os.path.exists(source_dir):
+            QMessageBox.warning(self, "路径错误", "源文档目录不存在！")
+            return
+            
+        if not os.path.exists(output_dir):
+            reply = QMessageBox.question(self, '确认操作', f'目录 "{output_dir}" 不存在，是否要创建它？', 
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                os.makedirs(output_dir)
+            else:
+                return
+
+        self.log_text_export.clear()
+        
+        # str_newpath 在 FileManipulator 中代表要处理的目录
+        self.file_manipulator = FileManipulator("", source_dir, {}, self.log_message)
+        
+        self.log_message("开始导出A2数据...")
+        try:
+            self.file_manipulator.read_A2_to_csv(output_dir)
+            self.log_message("\n✅ A2数据导出完成！")
+        except Exception as e:
+            self.log_message(f"\n❌ 导出过程中发生错误: {e}")
+
+    def execute_read_a5(self):
+        """执行读取A5文档并导出为CSV的操作"""
+        source_dir = self.export_source_edit.text().strip()
+        output_dir = self.csv_output_edit.text().strip()
+
+        if not source_dir or not output_dir:
+            QMessageBox.warning(self, "路径错误", "请选择源文档目录和CSV输出目录！")
+            return
+            
+        if not os.path.exists(source_dir):
+            QMessageBox.warning(self, "路径错误", "源文档目录不存在！")
+            return
+
+        if not os.path.exists(output_dir):
+            reply = QMessageBox.question(self, '确认操作', f'目录 "{output_dir}" 不存在，是否要创建它？', 
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                os.makedirs(output_dir)
+            else:
+                return
+
+        self.log_text_export.clear()
+        
+        # str_newpath 在 FileManipulator 中代表要处理的目录
+        self.file_manipulator = FileManipulator("", source_dir, {}, self.log_message)
+
+        self.log_message("开始导出A5数据...")
+        try:
+            self.file_manipulator.read_A5_to_csv(output_dir)
+            self.log_message("\n✅ A5数据导出完成！")
+        except Exception as e:
+            self.log_message(f"\n❌ 导出过程中发生错误: {e}")
+
     def create_config_tab(self):
         """创建配置选项卡（不包含日志区域）"""
         tab = QWidget()
@@ -365,6 +497,8 @@ class FileManagerApp(QMainWindow):
             log_text = self.log_text_main
         elif current_tab == 1:  # 日期设置选项卡
             log_text = self.log_text_date
+        elif current_tab == 2:  # 数据导出选项卡
+            log_text = self.log_text_export
         
         if log_text:
             log_text.append(message)
